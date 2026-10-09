@@ -1,5 +1,10 @@
+/*
+
+* FarsiYar - Supabase Configuration
+  */
+
 window.FARSYAR_SUPABASE_URL =
-  'https://viihjrasitrvcwxsbbql.supabase.co';
+'https://viihjrasitrvcwxsbbql.supabase.co';
 
 window.FARSYAR_SUPABASE_PUBLISHABLE_KEY =
-  'https://viihjrasitrvcwxsbbql.supabase.co';
+'sb_publishable_AAf5ZE4RP9f4UAXLeDX9oQ_abNGl7e_';

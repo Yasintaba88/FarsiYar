@@ -1,4 +1,3 @@
-
 window.FARSYAR_SUPABASE_URL =
   'https://viihjrasitrvcwxsbbql.supabase.co';
 

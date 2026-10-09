@@ -9,7 +9,7 @@ create table if not exists public.farsiyar_classes (
   title text not null default 'کلاس فارسی چهارم',
   roster jsonb not null default '[]'::jsonb check (jsonb_typeof(roster) = 'array'),
   lesson_index integer not null default 0 check (lesson_index between 0 and 16),
-  mission jsonb,
+  mission jsonb not null default '{}'::jsonb,
   notice text not null default '',
   board_state jsonb not null default '[]'::jsonb,
   created_at timestamptz not null default now(),
@@ -77,7 +77,7 @@ begin
     v_code := 'FAR-' || lpad(floor(random() * 10000)::integer::text, 4, '0');
     begin
       insert into public.farsiyar_classes(owner_id,room_code,title,lesson_index,roster,mission,notice,board_state)
-      values(v_user,v_code,'کلاس فارسی چهارم',0,'[]'::jsonb,null,'','[]'::jsonb) returning * into v_row;
+      values(v_user,v_code,'کلاس فارسی چهارم',0,'[]'::jsonb,'{}'::jsonb,'','[]'::jsonb) returning * into v_row;
       return v_row;
     exception when unique_violation then
       if v_try >= 30 then raise exception 'ROOM_CODE_EXHAUSTED'; end if;

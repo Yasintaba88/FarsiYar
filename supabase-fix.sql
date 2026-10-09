@@ -1,6 +1,10 @@
 -- فارسی‌یار: اصلاح/بازسازی تابع ساخت کلاس و امتیازدهی
 -- برای دیتابیس تازه، ابتدا supabase-schema.sql را اجرا کنید.
 create extension if not exists pgcrypto;
+
+update public.farsiyar_classes set mission = '{}'::jsonb where mission is null;
+alter table public.farsiyar_classes alter column mission set default '{}'::jsonb;
+alter table public.farsiyar_classes alter column mission set not null;
 create or replace function public.create_farsiyar_class()
 returns public.farsiyar_classes language plpgsql security invoker set search_path = public as $$
 declare v_user uuid := auth.uid(); v_code text; v_row public.farsiyar_classes; v_try integer := 0;
@@ -11,7 +15,7 @@ begin
     v_code := 'FAR-' || lpad(floor(random()*10000)::integer::text,4,'0');
     begin
       insert into public.farsiyar_classes(owner_id,room_code,title,lesson_index,roster,mission,notice,board_state)
-      values(v_user,v_code,'کلاس فارسی چهارم',0,'[]'::jsonb,null,'','[]'::jsonb) returning * into v_row;
+      values(v_user,v_code,'کلاس فارسی چهارم',0,'[]'::jsonb,'{}'::jsonb,'','[]'::jsonb) returning * into v_row;
       return v_row;
     exception when unique_violation then if v_try >= 30 then raise exception 'ROOM_CODE_EXHAUSTED'; end if;
     end;

@@ -16,6 +16,7 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[ch]));
   const faNum = (value) => String(value).replace(/\d/g, (d) => '۰۱۲۳۴۵۶۷۸۹'[Number(d)]);
+  const normalizeMission = (value) => value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length ? value : null;
   const messageOf = (err) => String(err?.message || err?.details || err?.hint || err || 'خطای نامشخص');
 
   function toast(message) {
@@ -176,7 +177,7 @@
 
   function hydrateFromClass(c) {
     roster = Array.isArray(c.roster) ? c.roster.slice(0, 29).concat(Array(Math.max(0, 29 - c.roster.length)).fill('')).slice(0, 29) : Array(29).fill('');
-    currentMission = c.mission || null;
+    currentMission = normalizeMission(c.mission);
     boardState = Array.isArray(c.board_state) ? c.board_state : [];
     if ($('roomCode')) $('roomCode').textContent = c.room_code || '----';
     if ($('liveLink')) $('liveLink').textContent = c.room_code ? `${location.origin}${location.pathname}?class=${encodeURIComponent(c.room_code)}` : '';
@@ -223,7 +224,7 @@
       .eq('id', classRow.id).select('*').single();
     if (error) { toast(errorText(error)); return false; }
     classRow = data;
-    currentMission = data.mission || null;
+    currentMission = normalizeMission(data.mission);
     boardState = Array.isArray(data.board_state) ? data.board_state : boardState;
     if (broadcast) await broadcastState();
     hydrateFromClass(data);
@@ -251,7 +252,7 @@
   async function setLesson() {
     if (!classRow) { renderLesson(); return; }
     const index = Number($('lessonSelect').value || 0);
-    await saveClass({ lesson_index: index, mission: null, notice: '' });
+    await saveClass({ lesson_index: index, mission: {}, notice: '' });
   }
 
   function renderMissionPreview() {
@@ -286,12 +287,11 @@
     }
     if (kind === 'dictation' || kind === 'sentence') mission.answerKey = $('mAnswer').value.trim();
     if (kind === 'sentence') mission.words = prompt.split('/').map((v) => v.trim()).filter(Boolean);
-    await saveClass({ mission });
-    toast('مأموریت برای کلاس ارسال شد.');
+    if (await saveClass({ mission })) toast('مأموریت برای کلاس ارسال شد.');
   }
 
-  async function endMission() { if (classRow) { await saveClass({ mission: null }); toast('مأموریت پایان یافت.'); } }
-  async function sendNotice() { if (!classRow) return; await saveClass({ notice: $('noticeInput').value.trim() }); toast('پیام به کلاس ارسال شد.'); }
+  async function endMission() { if (classRow && await saveClass({ mission: {} })) toast('مأموریت پایان یافت.'); }
+  async function sendNotice() { if (!classRow) return; if (await saveClass({ notice: $('noticeInput').value.trim() })) toast('پیام به کلاس ارسال شد.'); }
   async function copyLink() {
     if (!classRow) return;
     const url = `${location.origin}${location.pathname}?class=${encodeURIComponent(classRow.room_code)}`;
@@ -393,12 +393,12 @@
     $('studentJoin').classList.add('hidden'); $('studentApp').classList.remove('hidden');
     const student = JSON.parse(localStorage.getItem('farsiyar-student') || '{}');
     $('studentGreeting').textContent = `سلام ${student.name || ''}؛ آماده‌ای؟`;
-    currentMission = row.mission || null;
+    currentMission = normalizeMission(row.mission);
     renderStudentState(row);
   }
   function renderStudentState(row) {
     const student = JSON.parse(localStorage.getItem('farsiyar-student') || '{}');
-    const mission = row.mission || null;
+    const mission = normalizeMission(row.mission);
     $('studentNotice').textContent = row.notice || '';
     $('studentNotice').classList.toggle('show', Boolean(row.notice));
     const lesson = lessons[Number(row.lesson_index) || 0] || lessons[0];
@@ -461,7 +461,7 @@
     studentChannel = sb.channel('room:' + code).on('broadcast', { event: 'state' }, (event) => {
       const payload = event.payload;
       if (payload?.room_code !== code) return;
-      currentMission = payload.mission || null;
+      currentMission = normalizeMission(payload.mission);
       renderStudentState({ lesson_index: payload.lesson_index, mission: payload.mission, notice: payload.notice, board_state: payload.board_state });
     }).subscribe();
   }

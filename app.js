@@ -10,7 +10,7 @@
   let teacherChannel = null, roomChannel = null, studentChannel = null;
   let responses = [], scores = [], roster = Array(29).fill('');
   let currentMission = null, selectedMissionType = 'text', boardState = [];
-  let drawing = false, lastPoint = null, boardTimer = null, timerHandle = null;
+  let drawing = false, lastPoint = null, boardTimer = null, timerHandle = null, teacherChatTimer = null, studentExtrasTimer = null;
 
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -59,6 +59,8 @@
       if (ch && sb) sb.removeChannel(ch);
     });
     teacherChannel = roomChannel = studentChannel = null;
+    clearInterval(teacherChatTimer); teacherChatTimer = null;
+    clearInterval(studentExtrasTimer); studentExtrasTimer = null;
   }
 
   async function initSupabase() {
@@ -146,6 +148,9 @@
         hydrateFromClass(data);
         await Promise.all([loadResponses(), refreshScores()]);
         subscribeTeacher();
+        void loadTeacherVideos(); void loadTeacherChat(); void loadTeacherLiveStatus();
+        clearInterval(teacherChatTimer);
+        teacherChatTimer = setInterval(() => { if (classRow && teacherUser) void loadTeacherChat(); }, 4000);
       } else await createClass();
     } catch (err) {
       const text = errorText(err);
@@ -167,6 +172,9 @@
       hydrateFromClass(created);
       subscribeTeacher();
       await Promise.all([loadResponses(), refreshScores()]);
+      void loadTeacherVideos(); void loadTeacherChat(); void loadTeacherLiveStatus();
+      clearInterval(teacherChatTimer);
+      teacherChatTimer = setInterval(() => { if (classRow && teacherUser) void loadTeacherChat(); }, 4000);
       toast('کلاس ' + created.room_code + ' ساخته شد.');
     } catch (err) {
       const text = errorText(err);
@@ -350,6 +358,178 @@
     const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `farsiyar-${classRow?.room_code || 'class'}.json`; a.click(); URL.revokeObjectURL(url);
   }
   function printReport() { window.print(); }
+
+  const VIDEO_BUCKET = 'farsiyar-videos';
+  function publicVideoUrl(path) {
+    if (!sb || !path) return '';
+    return sb.storage.from(VIDEO_BUCKET).getPublicUrl(path).data.publicUrl;
+  }
+  function videoCardHtml(video, teacher = false) {
+    const url = publicVideoUrl(video.storage_path);
+    return `<article class="videoCard"><video controls preload="metadata" playsinline src="${esc(url)}"></video><div class="videoCardBody"><h4>${esc(video.title)}</h4><p>${esc(video.description || '')}</p><small>${esc(new Date(video.created_at).toLocaleDateString('fa-IR'))}</small>${teacher ? `<button class="dangerBtn videoDeleteBtn" data-video-id="${Number(video.id)}" data-video-path="${esc(video.storage_path)}">حذف فیلم</button>` : ''}</div></article>`;
+  }
+  async function loadTeacherVideos() {
+    if (!classRow || !sb || !$('teacherVideoList')) return;
+    try {
+      const { data, error } = await sb.from('farsiyar_videos').select('id,title,description,storage_path,created_at')
+        .eq('room_code', classRow.room_code).order('created_at', { ascending: false });
+      if (error) throw error;
+      $('teacherVideoList').innerHTML = (data || []).map((v) => videoCardHtml(v, true)).join('') || '<p class="muted">هنوز فیلمی برای این کلاس بارگذاری نشده است.</p>';
+      $('teacherVideoList').querySelectorAll('.videoDeleteBtn').forEach((btn) => btn.addEventListener('click', () => void deleteTeacherVideo(btn)));
+    } catch (err) {
+      if ($('teacherVideoList')) $('teacherVideoList').innerHTML = `<p class="muted">${esc(errorText(err))} — ابتدا فایل supabase-media-chat-migration.sql را اجرا کنید.</p>`;
+    }
+  }
+  async function uploadTeacherVideo(event) {
+    event.preventDefault();
+    if (!classRow || !sb || !teacherUser) { toast('ابتدا وارد حساب معلم شوید و کلاس بسازید.'); return; }
+    const file = $('videoFile')?.files?.[0];
+    const title = $('videoTitle')?.value.trim();
+    const description = $('videoDescription')?.value.trim() || '';
+    const status = $('videoUploadStatus');
+    if (!file || !title) { if (status) status.textContent = 'عنوان و فایل ویدیو را انتخاب کنید.'; return; }
+    if (!file.type.startsWith('video/')) { if (status) status.textContent = 'لطفاً یک فایل ویدیویی انتخاب کنید.'; return; }
+    if (file.size > 100 * 1024 * 1024) { if (status) status.textContent = 'حجم فایل باید حداکثر ۱۰۰ مگابایت باشد.'; return; }
+    const btn = $('uploadVideoBtn'); if (btn) btn.disabled = true;
+    if (status) status.textContent = 'در حال بارگذاری… لطفاً صفحه را نبندید.';
+    const safeName = file.name.normalize('NFKD').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-90) || 'lesson-video.mp4';
+    const path = `${classRow.room_code}/${Date.now()}-${safeName}`;
+    try {
+      const { error: uploadError } = await sb.storage.from(VIDEO_BUCKET).upload(path, file, { upsert: false, contentType: file.type });
+      if (uploadError) throw uploadError;
+      const { error: rowError } = await sb.from('farsiyar_videos').insert({
+        room_code: classRow.room_code, owner_id: teacherUser.id, title, description, storage_path: path
+      });
+      if (rowError) {
+        await sb.storage.from(VIDEO_BUCKET).remove([path]);
+        throw rowError;
+      }
+      $('videoUploadForm').reset();
+      if (status) status.textContent = 'فیلم با موفقیت اضافه شد.';
+      toast('فیلم به کتابخانه کلاس اضافه شد.');
+      await loadTeacherVideos();
+    } catch (err) {
+      if (status) status.textContent = errorText(err) + ' اگر مهاجرت را اجرا نکرده‌اید، ابتدا SQL جدید را اجرا کنید.';
+    } finally { if (btn) btn.disabled = false; }
+  }
+  async function deleteTeacherVideo(button) {
+    if (!classRow || !sb || !confirm('این فیلم از کتابخانه کلاس حذف شود؟')) return;
+    button.disabled = true;
+    const id = Number(button.dataset.videoId), path = button.dataset.videoPath;
+    try {
+      const { error: rowError } = await sb.from('farsiyar_videos').delete().eq('id', id).eq('room_code', classRow.room_code);
+      if (rowError) throw rowError;
+      const { error: storageError } = await sb.storage.from(VIDEO_BUCKET).remove([path]);
+      if (storageError) console.warn('[FarsiYar] video file cleanup:', storageError);
+      await loadTeacherVideos(); toast('فیلم حذف شد.');
+    } catch (err) { toast(errorText(err)); button.disabled = false; }
+  }
+  async function loadStudentVideos(code, name) {
+    if (!sb || !code || !name || !$('studentVideoList')) return;
+    try {
+      const { data, error } = await sb.rpc('student_list_farsiyar_videos', { p_room_code: code, p_student_name: name });
+      if (error) throw error;
+      $('studentVideoList').innerHTML = (data || []).map((v) => videoCardHtml(v, false)).join('') || '<p class="muted">هنوز فیلم آموزشی اضافه نشده است.</p>';
+    } catch (err) {
+      $('studentVideoList').innerHTML = `<p class="muted">کتابخانه فیلم در دسترس نیست. ${esc(errorText(err))}</p>`;
+    }
+  }
+  function renderChat(targetId, rows) {
+    const el = $(targetId); if (!el) return;
+    const ordered = (rows || []).slice().reverse();
+    const previous = el.scrollTop, nearBottom = el.scrollHeight - el.clientHeight - previous < 60;
+    el.innerHTML = ordered.map((m) => `<div class="chatMessage ${m.sender_role === 'teacher' ? 'teacherMessage' : ''}"><div><b>${esc(m.sender_name)}</b><small>${m.sender_role === 'teacher' ? 'معلم' : 'دانش‌آموز'} · ${esc(new Date(m.created_at).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }))}</small></div><p>${esc(m.body)}</p></div>`).join('') || '<p class="muted">هنوز پیامی ارسال نشده است.</p>';
+    if (nearBottom) el.scrollTop = el.scrollHeight;
+  }
+  async function loadTeacherChat() {
+    if (!classRow || !sb || !$('teacherChatMessages')) return;
+    try {
+      const { data, error } = await sb.from('farsiyar_chat_messages').select('id,sender_role,sender_name,body,created_at')
+        .eq('room_code', classRow.room_code).order('created_at', { ascending: false }).limit(100);
+      if (error) throw error;
+      renderChat('teacherChatMessages', data || []);
+    } catch (err) {
+      if ($('teacherChatMessages')) $('teacherChatMessages').innerHTML = '<p class="muted">برای فعال شدن چت، فایل مهاجرت جدید را در Supabase اجرا کنید.</p>';
+    }
+  }
+  async function sendTeacherChat(event) {
+    event.preventDefault();
+    const body = $('teacherChatInput')?.value.trim();
+    if (!body || !classRow || !sb || !teacherUser) return;
+    const input = $('teacherChatInput');
+    try {
+      const { error } = await sb.from('farsiyar_chat_messages').insert({
+        room_code: classRow.room_code, sender_role: 'teacher',
+        sender_name: 'معلم', body
+      });
+      if (error) throw error;
+      input.value = ''; await loadTeacherChat();
+    } catch (err) { toast(errorText(err)); }
+  }
+  async function loadStudentChat(code, name) {
+    if (!sb || !code || !name) return;
+    try {
+      const { data, error } = await sb.rpc('student_get_farsiyar_chat', { p_room_code: code, p_student_name: name });
+      if (error) throw error;
+      renderChat('studentChatMessages', data || []);
+    } catch (err) {
+      if ($('studentChatMessages')) $('studentChatMessages').innerHTML = '<p class="muted">گفت‌وگوی کلاس هنوز راه‌اندازی نشده است.</p>';
+    }
+  }
+  async function sendStudentChat(event) {
+    event.preventDefault();
+    const student = JSON.parse(localStorage.getItem('farsiyar-student') || '{}');
+    const input = $('studentChatInput'), body = input?.value.trim();
+    if (!body || !student.code || !student.name) return;
+    try {
+      const { error } = await sb.rpc('student_send_farsiyar_chat', {
+        p_room_code: student.code, p_student_name: student.name, p_body: body
+      });
+      if (error) throw error;
+      input.value = ''; await loadStudentChat(student.code, student.name);
+    } catch (err) { toast(errorText(err)); }
+  }
+  async function loadTeacherLiveStatus() {
+    if (!classRow || !sb || !$('toggleLive')) return;
+    try {
+      const { data, error } = await sb.from('farsiyar_live_sessions').select('is_live').eq('room_code', classRow.room_code).maybeSingle();
+      if (error) throw error;
+      const live = Boolean(data?.is_live);
+      $('toggleLive').textContent = live ? 'پایان کلاس' : 'شروع کلاس';
+      $('toggleLive').classList.toggle('dangerBtn', live);
+      $('toggleLive').classList.toggle('goldBtn', !live);
+    } catch (err) { console.warn('[FarsiYar] live status:', err); }
+  }
+  async function toggleClassLive() {
+    if (!classRow || !teacherUser || !sb) { toast('ابتدا وارد حساب معلم شوید.'); return; }
+    const btn = $('toggleLive'); if (btn) btn.disabled = true;
+    try {
+      const { data: current, error: readError } = await sb.from('farsiyar_live_sessions').select('is_live').eq('room_code', classRow.room_code).maybeSingle();
+      if (readError) throw readError;
+      const next = !Boolean(current?.is_live);
+      const { error } = await sb.from('farsiyar_live_sessions').upsert({
+        room_code: classRow.room_code, is_live: next, updated_by: teacherUser.id, updated_at: new Date().toISOString()
+      }, { onConflict: 'room_code' });
+      if (error) throw error;
+      await loadTeacherLiveStatus();
+      toast(next ? 'کلاس زنده شروع شد.' : 'کلاس پایان یافت.');
+    } catch (err) { toast(errorText(err)); }
+    finally { if (btn) btn.disabled = false; }
+  }
+  async function loadStudentLiveStatus(code, name) {
+    if (!sb || !code || !name || !$('studentLiveStatus')) return;
+    try {
+      const { data, error } = await sb.rpc('student_get_farsiyar_live_status', { p_room_code: code, p_student_name: name });
+      if (error) throw error;
+      const live = Boolean(data?.[0]?.is_live);
+      $('studentLiveStatus').textContent = live ? '🟢 کلاس اکنون زنده است؛ همراه معلم پیش برو.' : '⚪ کلاس فعلاً در حالت زنده نیست.';
+      $('studentLiveStatus').classList.toggle('isLive', live);
+    } catch (err) { $('studentLiveStatus').textContent = 'وضعیت کلاس در دسترس نیست؛ SQL مهاجرت جدید را بررسی کنید.'; }
+  }
+  async function refreshStudentExtras(code, name) {
+    await Promise.all([loadStudentVideos(code, name), loadStudentChat(code, name), loadStudentLiveStatus(code, name)]);
+  }
+
   function renderBook() {
     if (!$('bookList')) return;
     const chapters = {};
@@ -458,6 +638,9 @@
   }
   function subscribeStudent(code, name) {
     if (studentChannel) sb.removeChannel(studentChannel);
+    clearInterval(studentExtrasTimer);
+    void refreshStudentExtras(code, name);
+    studentExtrasTimer = setInterval(() => void refreshStudentExtras(code, name), 5000);
     studentChannel = sb.channel('room:' + code).on('broadcast', { event: 'state' }, (event) => {
       const payload = event.payload;
       if (payload?.room_code !== code) return;
@@ -531,6 +714,7 @@
       document.querySelectorAll('.tab').forEach((item) => item.classList.remove('active'));
       button.classList.add('active'); $(button.dataset.tab)?.classList.add('active');
       if (button.dataset.tab === 'reports') { void refreshScores(); void loadResponses(); renderReport(); }
+      if (button.dataset.tab === 'media') void loadTeacherVideos();
     });
   }
   function wire() {
@@ -542,6 +726,10 @@
     on('exportJson', exportJson); on('printReport', printReport); on('deleteClass', deleteClass); on('randomStudent', randomStudent);
     on('timerBtn', startTimer); on('reconnect', checkConnection); on('undoBoard', undoBoard); on('clearBoard', clearBoard);
     on('loadNames', loadStudentNames); on('joinBtn', joinStudent);
+    if ($('videoUploadForm')) $('videoUploadForm').addEventListener('submit', uploadTeacherVideo);
+    if ($('teacherChatForm')) $('teacherChatForm').addEventListener('submit', sendTeacherChat);
+    if ($('studentChatForm')) $('studentChatForm').addEventListener('submit', sendStudentChat);
+    on('toggleLive', toggleClassLive);
     document.querySelectorAll('[data-mission]').forEach((button) => button.onclick = () => selectMission(button.dataset.mission));
     if ($('lessonSelect')) {
       $('lessonSelect').innerHTML = lessons.map((lesson, i) => `<option value="${i}">درس ${faNum(lesson.no)} — ${esc(lesson.title)}</option>`).join('');

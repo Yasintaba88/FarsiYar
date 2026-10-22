@@ -4,3 +4,33 @@
 @media(max-width:900px){.topbar{flex-wrap:wrap}.connection{order:3;width:100%}.hero{grid-template-columns:1fr;min-height:auto;padding:25px 0 45px}.heroTile{order:-1}.homeGrid{grid-template-columns:1fr 1fr}.teacherLayout{grid-template-columns:1fr}.sidebar{position:static;display:grid;grid-template-columns:repeat(3,1fr)}.routeGrid{grid-template-columns:1fr 1fr}.missionTypes{grid-template-columns:1fr 1fr}.liveGrid,.studentGrid{grid-template-columns:1fr}.rosterGrid{grid-template-columns:1fr 1fr}.bookList,.manageGrid{grid-template-columns:1fr}}
 @media(max-width:600px){main{padding:15px 3vw 40px}.topbar{padding:10px 3vw}.topbar nav{width:100%;display:grid;grid-template-columns:repeat(3,1fr)}.topbar nav button{font-size:.72rem;padding:8px 4px}.hero h1{font-size:2.65rem}.hero p{font-size:.95rem}.homeGrid{grid-template-columns:1fr}.sidebar{grid-template-columns:1fr 1fr}.sideBtn{text-align:center}.routeGrid,.missionTypes,.rosterGrid{grid-template-columns:1fr}.lessonCard{grid-template-columns:1fr}.panelHead,.sectionTitle{align-items:flex-start}.inline{flex-direction:column;align-items:stretch}.studentTop{align-items:flex-start}.bookList{grid-template-columns:1fr}}
 @media(prefers-color-scheme:dark){:root{--cream:#0a1720;--paper:#10212c;--ink:#e5edf0;--muted:#a7b7bf;--line:#29404d;--navy:#061a2a}.tilePattern{opacity:.04}.homeGrid article,.panelBox,.studentCard,.authBox,.studentJoin,.missionBuilder,.liveMission,.noticeComposer,.bookChapter,.bookLesson{background:#10212c}.lessonSelectWrap{background:#071d2d}.miniStats span{background:#10212c}.bookLesson{color:#e5edf0}.authBox input,.studentJoin input,.studentJoin select,.builder input,.builder textarea,.noticeComposer input{background:#0b1b25;color:#e5edf0}.missionPreview{background:#0b2029}.studentNotice{background:#3b321d}.reportTable table{background:#10212c}}
+
+
+/* افزونه‌های کتابخانه فیلم، گفت‌وگوی زنده و وضعیت کلاس؛ استایل‌های قبلی حفظ شده‌اند */
+.videoUploadForm{display:grid;gap:8px;max-width:760px}
+.videoUploadForm label{font-size:.84rem;font-weight:800;margin-top:5px}
+.videoUploadForm input,.videoUploadForm textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:11px;background:var(--paper);color:var(--ink)}
+.videoUploadForm textarea{min-height:80px;resize:vertical}
+.videoUploadForm button{justify-self:start}
+.videoGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}
+.videoCard{min-width:0;overflow:hidden;border:1px solid var(--line);border-radius:15px;background:var(--paper);box-shadow:var(--shadow)}
+.videoCard video{display:block;width:100%;max-height:290px;aspect-ratio:16/9;background:#061a2a;object-fit:contain}
+.videoCardBody{padding:13px}
+.videoCardBody h4{margin:0 0 6px;color:var(--navy);overflow-wrap:anywhere}
+.videoCardBody p{font-size:.88rem;line-height:1.8;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}
+.videoCardBody small{color:var(--muted);display:block;margin:8px 0}
+.videoDeleteBtn{margin-top:8px}
+.chatPanel{min-width:0}
+.chatMessages{height:260px;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:10px;background:rgba(245,240,229,.45);margin:12px 0}
+.chatMessage{padding:9px 10px;margin:7px 0;background:var(--paper);border:1px solid var(--line);border-radius:11px;overflow-wrap:anywhere}
+.chatMessage.teacherMessage{border-right:4px solid var(--gold);background:rgba(213,163,58,.09)}
+.chatMessage>div{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.chatMessage b{color:var(--navy);font-size:.86rem}
+.chatMessage small{font-size:.7rem;color:var(--muted)}
+.chatMessage p{white-space:pre-wrap;margin:6px 0 0;line-height:1.8}
+.chatComposer{display:flex;gap:8px;align-items:center}
+.chatComposer input{flex:1;min-width:0;padding:11px;border:1px solid var(--line);border-radius:11px;background:var(--paper);color:var(--ink)}
+.liveStatus{padding:12px 15px;margin:0 0 15px;border:1px solid var(--line);border-radius:12px;background:var(--paper);color:var(--muted);font-weight:700}
+.liveStatus.isLive{background:#e2f5ed;color:#12664b;border-color:#9ad9bf}
+@media(max-width:700px){.videoGrid{grid-template-columns:1fr}.chatComposer{align-items:stretch}.chatComposer button{white-space:nowrap}.chatMessages{height:230px}}
+@media(prefers-color-scheme:dark){.chatMessages{background:#0b1b25}.chatMessage.teacherMessage{background:#2d291c}.liveStatus.isLive{background:#123c31;color:#a9ecd2;border-color:#276a54}}
